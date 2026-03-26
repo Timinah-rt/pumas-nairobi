@@ -8,22 +8,13 @@ from datetime import datetime
 import sys
 import os
 
-APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if APP_ROOT not in sys.path:
-    sys.path.insert(0, APP_ROOT)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    from src.data.data_pipeline import DataPipeline, get_nairobi_zones
-    from src.data.weather_api import OpenWeatherMapAPI
-    from src.data.cost_calculator import get_default_travel_times, WeatherPredictor
-    from src.data.routing_api import OpenRouteServiceAPI
-    from src.ml.models import TimeBasedAnalyzer
-except ModuleNotFoundError:
-    from data_pipeline import DataPipeline, get_nairobi_zones
-    from weather_api import OpenWeatherMapAPI
-    from cost_calculator import get_default_travel_times, WeatherPredictor
-    from routing_api import OpenRouteServiceAPI
-    from ml.models import TimeBasedAnalyzer
+from src.data.data_pipeline import DataPipeline, get_nairobi_zones
+from src.data.weather_api import OpenWeatherMapAPI
+from src.data.cost_calculator import get_default_travel_times, WeatherPredictor
+from src.data.routing_api import OpenRouteServiceAPI
+from src.ml.models import TimeBasedAnalyzer
 
 st.set_page_config(
     page_title="PUMAS - Nairobi Traffic Dashboard",
