@@ -665,7 +665,7 @@ def main():
     pipeline = load_pipeline()
     predictor = WeatherPredictor()
     
-    tabs = st.tabs(["🗺️ Trip Planner", "📍 Zone Details", "⏰ Time Analysis", "💵 Cost Analysis", "🗺️ All Zones"])
+    tabs = st.tabs(["🗺️ Trip Planner", "📍 Zone Details", "⏰ Time Analysis", "💵 Cost Analysis", "🗺️ All Zones", "📊 Analytics"])
     
     with tabs[0]:
         st.markdown("## Plan Your Trip")
@@ -780,6 +780,324 @@ def main():
             })
         
         st.dataframe(pd.DataFrame(zones_data), use_container_width=True, hide_index=True)
+    
+    # ============================================
+    # ANALYTICS TAB
+    # ============================================
+    with tabs[5]:
+        st.markdown("## 📊 Analytics Dashboard")
+        st.markdown("### Answer: What happened? Why? What will happen?")
+        
+        analytics_subtabs = st.tabs(["📈 Descriptive", "🔍 Diagnostic", "🔮 Predictive"])
+        
+        # DESCRIPTIVE ANALYTICS
+        with analytics_subtabs[0]:
+            st.markdown("### 📈 What Happened? (Descriptive Analytics)")
+            
+            desc_page = st.selectbox("Select Page", ["1. Traffic Overview", "2. Statistics", "3. Top Lists", "4. Time Distribution", "5. Route Summary"], key="desc_page")
+            
+            if desc_page == "1. Traffic Overview":
+                st.markdown("#### Traffic Trends (Last 7 Days)")
+                trends = pipeline.get_7day_trends()
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=trends['dates'], y=trends['traffic_index'], mode='lines+markers', name='Traffic Index', line=dict(color='#1E88E5', width=3)))
+                fig.update_layout(title='Traffic Index Over 7 Days', template='plotly_white', height=350, xaxis_title='Date', yaxis_title='Traffic Index')
+                st.plotly_chart(fig, use_container_width=True)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("#### Traffic by Hour (Average)")
+                    hourly_data = pipeline.get_hourly_summary()
+                    if hourly_data is not None:
+                        fig2 = go.Figure(go.Bar(x=hourly_data['hour'], y=hourly_data['traffic_index'], marker_color='#667eea'))
+                        fig2.update_layout(template='plotly_white', height=300, xaxis_title='Hour', yaxis_title='Avg Traffic Index')
+                        st.plotly_chart(fig2, use_container_width=True)
+                
+                with col2:
+                    st.markdown("#### Traffic by Day of Week")
+                    day_comparison = pipeline.compare_days()
+                    days = [d['day'] for d in day_comparison.get('days', [])]
+                    indices = [d['traffic_index'] for d in day_comparison.get('days', [])]
+                    colors = ['#F44336' if i > 1.3 else '#FF9800' if i > 1.1 else '#4CAF50' for i in indices]
+                    fig3 = go.Figure(go.Bar(x=days, y=indices, marker_color=colors))
+                    fig3.update_layout(template='plotly_white', height=300, xaxis_title='Day', yaxis_title='Traffic Index')
+                    st.plotly_chart(fig3, use_container_width=True)
+            
+            elif desc_page == "2. Statistics":
+                st.markdown("#### Statistics Dashboard")
+                stats = pipeline.get_statistics_summary()
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    vc = stats.get('traffic', {}).get('vehicle_count', {})
+                    st.metric("Avg Vehicles", f"{vc.get('avg', 0):.0f}", f"{vc.get('std', 0):.1f} std")
+                with col2:
+                    sp = stats.get('traffic', {}).get('speed', {})
+                    st.metric("Avg Speed", f"{sp.get('avg', 0):.1f} km/h", f"{sp.get('min', 0):.0f} min")
+                with col3:
+                    ti = stats.get('traffic', {}).get('traffic_index', {})
+                    st.metric("Avg Traffic Index", f"{ti.get('avg', 0):.2f}", f"{ti.get('max', 0):.1f} max")
+                with col4:
+                    tr = stats.get('trips', {})
+                    st.metric("Total Trips", f"{tr.get('total_trips', 0):,}", f"{tr.get('avg_distance', 0):.1f} km avg")
+                
+                st.markdown("#### Zone Statistics")
+                zone_stats = pipeline.get_zone_statistics()
+                if zone_stats is not None:
+                    st.dataframe(zone_stats, use_container_width=True, hide_index=True)
+            
+            elif desc_page == "3. Top Lists":
+                st.markdown("#### 🏆 Top 5 Most Congested Zones")
+                top_zones = pipeline.get_top_congested_zones(5)
+                for i, z in enumerate(top_zones, 1):
+                    st.markdown(f"**{i}. {z['zone']}** - Traffic Index: {z['traffic_index']:.2f}, Vehicles: {z['vehicle_count']:.0f}")
+                
+                st.markdown("#### 🏆 Top 5 Busiest Routes")
+                top_routes = pipeline.get_top_routes(5)
+                route_df = pd.DataFrame(top_routes)
+                st.dataframe(route_df, use_container_width=True, hide_index=True)
+                
+                st.markdown("#### Top Congested Zones Chart")
+                fig = go.Figure(go.Bar(x=[z['zone'] for z in top_zones], y=[z['traffic_index'] for z in top_zones], marker_color='#F44336'))
+                fig.update_layout(template='plotly_white', height=300, xaxis_title='Zone', yaxis_title='Traffic Index')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            elif desc_page == "4. Time Distribution":
+                st.markdown("#### ⏰ Trips by Hour of Day")
+                time_dist = pipeline.get_time_distribution()
+                hours = list(range(24))
+                counts = [time_dist['by_hour'].get(h, 0) for h in hours]
+                fig = go.Figure(go.Pie(labels=[f"{h}:00" for h in hours], values=counts, hole=0.4))
+                fig.update_layout(template='plotly_white', height=350, title='Trips by Hour')
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("#### 📅 Trips by Day of Week")
+                days = list(time_dist['by_day'].keys())
+                day_counts = list(time_dist['by_day'].values())
+                fig2 = go.Figure(go.Bar(x=days, y=day_counts, marker_color='#667eea'))
+                fig2.update_layout(template='plotly_white', height=300, xaxis_title='Day', yaxis_title='Number of Trips')
+                st.plotly_chart(fig2, use_container_width=True)
+            
+            elif desc_page == "5. Route Summary":
+                st.markdown("#### 🛣️ Popular Routes")
+                route_summary = pipeline.get_route_summary()
+                if route_summary.get('popular_routes'):
+                    routes_df = pd.DataFrame(route_summary['popular_routes'])
+                    st.dataframe(routes_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No route data available")
+                
+                st.markdown("#### 🚗 Transport Mode Distribution")
+                mode_dist = route_summary.get('mode_distribution', {})
+                if mode_dist:
+                    fig = go.Figure(go.Pie(labels=list(mode_dist.keys()), values=list(mode_dist.values()), hole=0.4, marker_colors=['#4CAF50', '#FF9800', '#2196F3', '#9C27B0']))
+                    fig.update_layout(template='plotly_white', height=350, title='Trips by Mode')
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        # DIAGNOSTIC ANALYTICS
+        with analytics_subtabs[1]:
+            st.markdown("### 🔍 Why Did It Happen? (Diagnostic Analytics)")
+            
+            diag_page = st.selectbox("Select Page", ["1. Cause Analysis", "2. Anomalies", "3. Factor Contributions", "4. Comparison"], key="diag_page")
+            
+            if diag_page == "1. Cause Analysis":
+                st.markdown("#### 🔍 Traffic Cause Breakdown")
+                cause = pipeline.get_traffic_cause_breakdown()
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.markdown(f"""
+                    <div class="metric-card" style="text-align: center;">
+                        <h3>⏰ Time</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: #FF9800;">{cause['time_factor']}%</p>
+                        <small>Rush Hour Factor</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col2:
+                    st.markdown(f"""
+                    <div class="metric-card" style="text-align: center;">
+                        <h3>🌧️ Weather</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: #2196F3;">{cause['weather_factor']}%</p>
+                        <small>Weather Impact</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col3:
+                    st.markdown(f"""
+                    <div class="metric-card" style="text-align: center;">
+                        <h3>📍 Location</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: #4CAF50;">{cause['location_factor']}%</p>
+                        <small>Zone Risk Factor</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown(f"**Explanation:** {cause['explanation']}")
+                
+                fig = go.Figure(go.Bar(x=['Time', 'Weather', 'Location'], y=[cause['time_factor'], cause['weather_factor'], cause['location_factor']], marker_color=['#FF9800', '#2196F3', '#4CAF50']))
+                fig.update_layout(template='plotly_white', height=300, title='Traffic Cause Distribution')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            elif diag_page == "2. Anomalies":
+                st.markdown("#### ⚠️ Anomaly Detection (>80% above normal)")
+                anomalies = pipeline.get_anomalies(threshold=0.8)
+                
+                if anomalies:
+                    for a in anomalies:
+                        st.markdown(f"""
+                        <div style="background: #FFEBEE; border-left: 5px solid #F44336; padding: 1rem; margin: 0.5rem 0; border-radius: 5px;">
+                            <h4 style="margin: 0;">⚠️ {a['zone']} at {a['hour']}:00</h4>
+                            <p style="margin: 0.5rem 0;">Traffic Index: {a['traffic_index']:.2f} (Baseline: {a['baseline']:.2f})</p>
+                            <p style="margin: 0; color: #F44336; font-weight: bold;">Deviation: +{a['deviation_percent']}%</p>
+                            <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;">{a['reason']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.success("✅ No anomalies detected - traffic is within normal range")
+                
+                st.markdown("#### Hourly Traffic Pattern")
+                hourly = pipeline.get_hourly_summary()
+                if hourly is not None:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=hourly['hour'], y=hourly['traffic_index'], mode='lines+markers', fill='tonexty', fillcolor='rgba(30, 136, 229, 0.2)', line=dict(color='#1E88E5')))
+                    fig.update_layout(template='plotly_white', height=300, title='Traffic Pattern by Hour')
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            elif diag_page == "3. Factor Contributions":
+                st.markdown("#### 📉 Factor Impact Analysis")
+                factors = pipeline.get_factor_contributions()
+                
+                for factor_name, data in factors.items():
+                    label = data['label']
+                    value = data['value']
+                    st.markdown(f"**{factor_name.replace('_', ' ').title()}**: {label}")
+                    st.progress(value / 100)
+                    st.caption(f"{value}% contribution to current traffic")
+                    st.markdown("")
+            
+            elif diag_page == "4. Comparison":
+                st.markdown("#### 📅 Day of Week Comparison")
+                day_comp = pipeline.compare_days()
+                
+                for day in day_comp.get('days', []):
+                    color = '#F44336' if day['status'] == 'High' else '#4CAF50' if day['status'] == 'Low' else '#FF9800'
+                    st.markdown(f"""
+                    <div style="display: flex; justify-content: space-between; padding: 0.5rem; border-bottom: 1px solid #eee;">
+                        <span><strong>{day['day']}</strong></span>
+                        <span style="color: {color};">{day['traffic_index']} ({day['difference_percent']:+.1f}%)</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("#### 🗺️ Zone Diagnosis")
+                col1, col2 = st.columns(2)
+                with col1:
+                    z1 = st.selectbox("Zone 1", list(NAIROBI_ZONES.keys()), key="z1_diag")
+                with col2:
+                    z2 = st.selectbox("Zone 2", list(NAIROBI_ZONES.keys()), index=1, key="z2_diag")
+                
+                if z1 and z2:
+                    diagnosis = pipeline.diagnose_zones(z1, z2)
+                    st.markdown("**Diagnosis:**")
+                    for d in diagnosis['diagnosis']:
+                        st.write(f"• {d}")
+        
+        # PREDICTIVE ANALYTICS
+        with analytics_subtabs[2]:
+            st.markdown("### 🔮 What Will Happen? (Predictive Analytics)")
+            
+            pred_page = st.selectbox("Select Page", ["1. 24-Hour Forecast", "2. Weekly Outlook", "3. Demand & Prices", "4. Warnings"], key="pred_page")
+            
+            if pred_page == "1. 24-Hour Forecast":
+                st.markdown("#### 📈 24-Hour Traffic Prediction")
+                forecast = pipeline.predict_24h_traffic()
+                
+                hours = [p['hour'] for p in forecast['predictions']]
+                indices = [p['predicted_index'] for p in forecast['predictions']]
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=hours, y=indices, mode='lines+markers', line=dict(color='#667eea', width=3), marker=dict(size=8)))
+                fig.add_trace(go.Scatter(x=hours, y=[1.5]*24, mode='lines', line=dict(color='red', dash='dash'), name='Congestion Threshold'))
+                fig.update_layout(template='plotly_white', height=400, title='24-Hour Traffic Forecast', xaxis_title='Hour', yaxis_title='Predicted Traffic Index')
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.caption(f"Forecast generated at: {forecast['generated_at']}")
+                
+                st.markdown("#### Peak Hours Prediction")
+                peak_hours = [p for p in forecast['predictions'] if p['predicted_index'] > 1.5]
+                if peak_hours:
+                    st.warning(f"Expected peak congestion at: {', '.join([f'{p['hour']}:00' for p in peak_hours])}")
+            
+            elif pred_page == "2. Weekly Outlook":
+                st.markdown("#### 📅 7-Day Traffic Outlook")
+                outlook = pipeline.predict_weekly_outlook()
+                
+                days = [o['day'] for o in outlook['outlook']]
+                indices = [o['predicted_traffic'] for o in outlook['outlook']]
+                colors = ['#F44336' if i > 1.3 else '#FF9800' if i > 1.0 else '#4CAF50' for i in indices]
+                
+                fig = go.Figure(go.Bar(x=days, y=indices, marker_color=colors, text=indices, textposition='outside'))
+                fig.update_layout(template='plotly_white', height=350, title='Weekly Traffic Outlook', xaxis_title='Day', yaxis_title='Predicted Traffic')
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("#### Travel Recommendations")
+                for o in outlook['outlook']:
+                    icon = "⚠️" if o['recommendation'].startswith('Avoid') else "✅" if o['recommendation'].startswith('Good') else "⏰"
+                    st.write(f"{icon} **{o['day']}**: {o['recommendation']}")
+            
+            elif pred_page == "3. Demand & Prices":
+                st.markdown("#### 🚐 Predicted Demand by Route")
+                demand = pipeline.predict_demand()
+                
+                if demand.get('routes'):
+                    demand_df = pd.DataFrame(demand['routes'])
+                    st.dataframe(demand_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No demand data available")
+                
+                st.markdown("#### 💰 Price Predictions")
+                prices = pipeline.predict_prices()
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.markdown(f"""
+                    <div class="metric-card" style="text-align: center;">
+                        <h3>🚌 Matatu</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: #FF9800;">{prices['matatu']['current']} KES</p>
+                        <small>Typical: {prices['matatu']['typical']} KES</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col2:
+                    st.markdown(f"""
+                    <div class="metric-card" style="text-align: center;">
+                        <h3>🚗 Driving</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: #2196F3;">{prices['driving']['current']} KES</p>
+                        <small>Typical: {prices['driving']['typical']} KES</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col3:
+                    st.markdown(f"""
+                    <div class="metric-card" style="text-align: center;">
+                        <h3>♿ Wheelchair</h3>
+                        <p style="font-size: 2rem; font-weight: 700; color: #EC4899;">50 KES</p>
+                        <small>Fixed Rate</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            elif pred_page == "4. Warnings":
+                st.markdown("#### ⚡ Congestion Warnings")
+                warnings = pipeline.get_congestion_warnings()
+                
+                if warnings.get('warnings'):
+                    for w in warnings['warnings']:
+                        severity_color = '#F44336' if w['severity'] == 'high' else '#FF9800'
+                        st.markdown(f"""
+                        <div style="background: #FFF3E0; border-left: 5px solid {severity_color}; padding: 1rem; margin: 0.5rem 0; border-radius: 5px;">
+                            <h4 style="margin: 0; color: {severity_color};">⚠️ {w['zone']} - {w['type'].title()}</h4>
+                            <p style="margin: 0.5rem 0;">{w['message']}</p>
+                            <p style="margin: 0; font-size: 0.9rem;">Expected Delay: {w['expected_delay']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.success("✅ No active warnings - smooth traffic expected")
     
     st.markdown("---")
     
